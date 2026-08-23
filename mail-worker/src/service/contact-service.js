@@ -1,4 +1,4 @@
-import { and, asc, count, eq, like, or, desc } from 'drizzle-orm';
+import { and, asc, count, eq, like, or, desc, sql } from 'drizzle-orm';
 import orm from '../entity/orm';
 import contact from '../entity/contact';
 import email from '../entity/email';
@@ -21,11 +21,9 @@ const contactService = {
 		const total = await orm(c).select({ total: count() }).from(contact).where(and(...where)).get();
 		return { list, total: total?.total || 0, page, size };
 	},
-
 	async get(c, contactId, userId) {
 		return orm(c).select().from(contact).where(and(eq(contact.contactId, Number(contactId)), eq(contact.userId, userId), eq(contact.isDel, isDel.NORMAL))).get();
 	},
-
 	async create(c, params, userId) {
 		const name = String(params.name || '').trim();
 		const emailAddress = normalizeEmail(params.email);
@@ -34,7 +32,6 @@ const contactService = {
 		if (exists) throw new BizError('Contact email already exists');
 		return orm(c).insert(contact).values({ userId, name, email: emailAddress }).returning().get();
 	},
-
 	async update(c, params, userId) {
 		const contactId = Number(params.contactId);
 		const name = String(params.name || '').trim();
@@ -46,23 +43,14 @@ const contactService = {
 		if (duplicate.some(row => row.contactId !== contactId)) throw new BizError('Contact email already exists');
 		return orm(c).update(contact).set({ name, email: emailAddress, updateTime: new Date().toISOString() }).where(and(eq(contact.contactId, contactId), eq(contact.userId, userId), eq(contact.isDel, isDel.NORMAL))).returning().get();
 	},
-
 	async delete(c, contactId, userId) {
 		await orm(c).update(contact).set({ isDel: isDel.DELETE, updateTime: new Date().toISOString() }).where(and(eq(contact.contactId, Number(contactId)), eq(contact.userId, userId), eq(contact.isDel, isDel.NORMAL))).run();
 	},
-
 	async emails(c, params, userId) {
 		const contactRow = await this.get(c, params.contactId, userId);
 		if (!contactRow) throw new BizError('Contact not found');
 		const normalized = normalizeEmail(contactRow.email);
-		const where = and(
-			eq(email.userId, userId),
-			eq(email.isDel, isDel.NORMAL),
-			or(
-				sql`lower(${email.sendEmail}) = ${normalized}`,
-				sql`lower(${email.recipient}) like ${`%"address":"${normalized}"%`}`
-			)
-		);
+		const where = and(eq(email.userId, userId), eq(email.isDel, isDel.NORMAL), or(sql`lower(${email.sendEmail}) = ${normalized}`, sql`lower(${email.recipient}) like ${`%"address":"${normalized}"%`}`));
 		const size = Math.min(Math.max(Number(params.size) || 50, 1), 100);
 		const page = Math.max(Number(params.page) || 1, 1);
 		const list = await orm(c).select().from(email).where(where).orderBy(desc(email.emailId)).limit(size).offset((page - 1) * size).all();
@@ -70,6 +58,5 @@ const contactService = {
 		return { contact: contactRow, list, total: total?.total || 0, page, size };
 	}
 };
-
 export { normalizeEmail };
 export default contactService;
