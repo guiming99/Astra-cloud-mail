@@ -12,13 +12,12 @@ const contactService = {
 		const keyword = String(params.keyword || '').trim();
 		const size = Math.min(Math.max(Number(params.size) || 50, 1), 100);
 		const page = Math.max(Number(params.page) || 1, 1);
-		const offset = (page - 1) * size;
 		const where = [eq(contact.userId, userId), eq(contact.isDel, isDel.NORMAL)];
 		if (keyword) {
 			const pattern = `%${keyword}%`;
 			where.push(or(like(contact.name, pattern), like(contact.email, pattern)));
 		}
-		const list = await orm(c).select().from(contact).where(and(...where)).orderBy(asc(contact.name), asc(contact.contactId)).limit(size).offset(offset).all();
+		const list = await orm(c).select().from(contact).where(and(...where)).orderBy(asc(contact.name), asc(contact.contactId)).limit(size).offset((page - 1) * size).all();
 		const total = await orm(c).select({ total: count() }).from(contact).where(and(...where)).get();
 		return { list, total: total?.total || 0, page, size };
 	},
@@ -41,7 +40,7 @@ const contactService = {
 		const name = String(params.name || '').trim();
 		const emailAddress = normalizeEmail(params.email);
 		if (!contactId || !name || !emailAddress) throw new BizError('Contact id, name and email are required');
-		const exists = await orm(c).select().from(contact).where(and(eq(contact.userId, userId), eq(contact.email, emailAddress), eq(contact.contactId, contactId).not ? eq(contact.contactId, contactId) : eq(contact.contactId, contactId), eq(contact.isDel, isDel.NORMAL))).get();
+		const exists = await this.get(c, contactId, userId);
 		if (!exists) throw new BizError('Contact not found');
 		const duplicate = await orm(c).select().from(contact).where(and(eq(contact.userId, userId), eq(contact.email, emailAddress), eq(contact.isDel, isDel.NORMAL))).all();
 		if (duplicate.some(row => row.contactId !== contactId)) throw new BizError('Contact email already exists');
@@ -55,22 +54,18 @@ const contactService = {
 	async emails(c, params, userId) {
 		const contactRow = await this.get(c, params.contactId, userId);
 		if (!contactRow) throw new BizError('Contact not found');
-		const size = Math.min(Math.max(Number(params.size) || 50, 1), 100);
-		const page = Math.max(Number(params.page) || 1, 1);
-		const offset = (page - 1) * size;
 		const normalized = normalizeEmail(contactRow.email);
-		const sender = contactRow.email.toLowerCase();
-		const recipientMatch = `[%"address":"${normalized}"%`;
 		const where = and(
 			eq(email.userId, userId),
 			eq(email.isDel, isDel.NORMAL),
 			or(
-				eq(email.sendEmail, sender),
-				like(email.recipient, recipientMatch),
-				like(email.recipient, `[%"address":"${normalized.toUpperCase()}"%`)
+				sql`lower(${email.sendEmail}) = ${normalized}`,
+				sql`lower(${email.recipient}) like ${`%"address":"${normalized}"%`}`
 			)
 		);
-		const list = await orm(c).select().from(email).where(where).orderBy(desc(email.emailId)).limit(size).offset(offset).all();
+		const size = Math.min(Math.max(Number(params.size) || 50, 1), 100);
+		const page = Math.max(Number(params.page) || 1, 1);
+		const list = await orm(c).select().from(email).where(where).orderBy(desc(email.emailId)).limit(size).offset((page - 1) * size).all();
 		const total = await orm(c).select({ total: count() }).from(email).where(where).get();
 		return { contact: contactRow, list, total: total?.total || 0, page, size };
 	}
