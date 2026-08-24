@@ -16,8 +16,21 @@ export function emailRead(emailIds) {
     return http.put('/email/read', {emailIds})
 }
 
+function composeEnhancedForm(form) {
+    const enhanced = {...form};
+    const cc = window.__cloudMailCcBcc?.cc || [];
+    const bcc = window.__cloudMailCcBcc?.bcc || [];
+    const forwardAttachments = window.__cloudMailForwardAttachments || [];
+    if (cc.length) enhanced.cc = [...cc];
+    if (bcc.length) enhanced.bcc = [...bcc];
+    if (forwardAttachments.length && (!enhanced.attachments || enhanced.attachments.length === 0)) {
+        enhanced.attachments = [...forwardAttachments];
+    }
+    return enhanced;
+}
+
 export function emailSend(form,progress) {
-    return http.post('/email/send', form,{
+    return http.post('/email/send', composeEnhancedForm(form),{
         onUploadProgress: (e) => {
             progress(e)
         },
