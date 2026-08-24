@@ -1,5 +1,6 @@
 import app from '../hono/hono';
 import emailService from '../service/email-service';
+import emailComposeSourceService from '../service/email-compose-source-service';
 import result from '../model/result';
 import userContext from '../security/user-context';
 import attService from '../service/att-service';
@@ -15,6 +16,11 @@ app.get('/email/list', async (c) => {
 app.get('/email/latest', async (c) => {
 	const list = await emailService.latest(c, c.req.query(), userContext.getUserId(c));
 	return c.json(result.ok(list));
+});
+
+app.get('/email/compose-source', async (c) => {
+	const source = await emailComposeSourceService.get(c, c.req.query().emailId, userContext.getUserId(c));
+	return c.json(result.ok(source));
 });
 
 app.delete('/email/delete', async (c) => {
