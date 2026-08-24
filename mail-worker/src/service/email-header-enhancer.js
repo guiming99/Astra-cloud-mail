@@ -10,7 +10,7 @@ export function installEmailHeaderEnhancer(emailService) {
   emailService.__headerEnhancerInstalled = true;
 
   emailService.sendByCloudflareEmail = async function(c, params) {
-    const sendForm = { from: { email: params.accountEmail, name: params.name }, to: [...params.receiveEmail], subject: params.subject };
+    const sendForm = { from: { email: params.accountEmail, name: params.name }, to: [...(params.primaryTo || params.receiveEmail)], subject: params.subject };
     if (params.cc?.length) sendForm.cc = params.cc;
     if (params.bcc?.length) sendForm.bcc = params.bcc;
     if (params.text) sendForm.text = params.text;
@@ -24,7 +24,7 @@ export function installEmailHeaderEnhancer(emailService) {
 
   emailService.sendByResend = async function(resendToken, params) {
     const resend = new Resend(resendToken);
-    const sendForm = { from: `${params.name} <${params.accountEmail}>`, to: [...params.receiveEmail], subject: params.subject, text: params.text, html: params.html, attachments: await this.toResendAttachments(params.attachments || []) };
+    const sendForm = { from: `${params.name} <${params.accountEmail}>`, to: [...(params.primaryTo || params.receiveEmail)], subject: params.subject, text: params.text, html: params.html, attachments: await this.toResendAttachments(params.attachments || []) };
     if (params.cc?.length) sendForm.cc = [...params.cc];
     if (params.bcc?.length) sendForm.bcc = [...params.bcc];
     if (params.sendType === 'reply' && params.messageId) sendForm.headers = { 'in-reply-to': params.messageId, references: params.messageId };
@@ -39,7 +39,7 @@ export function installEmailHeaderEnhancer(emailService) {
     const { domainList = [] } = await settingService.query(c);
     const allRecipients = unique([...to, ...cleanCc, ...cleanBcc]);
     const allInternal = allRecipients.every(address => domainList.includes('@' + emailUtils.getDomain(address)));
-    const enhancedParams = { ...params, receiveEmail: allInternal ? to : allRecipients, cc: cleanCc, bcc: cleanBcc };
+    const enhancedParams = { ...params, receiveEmail: allInternal ? to : allRecipients, primaryTo: to, cc: cleanCc, bcc: cleanBcc };
 
     const originalHandle = emailService.HandleOnSiteEmail;
     let internalSendData = null, internalAttList = null;
@@ -56,7 +56,6 @@ export function installEmailHeaderEnhancer(emailService) {
         await c.env.db.prepare('UPDATE email SET recipient = ?, cc = ?, bcc = ? WHERE email_id = ? AND user_id = ?')
           .bind(JSON.stringify(storedTo), JSON.stringify(cleanCc), JSON.stringify(cleanBcc), sent.emailId, userId).run();
       }
-
       if (allInternal && internalSendData && internalAttList) {
         const visibleRecipients = unique([...to, ...cleanCc]).map(address => ({ address, name: '' }));
         if (cleanCc.length) {
