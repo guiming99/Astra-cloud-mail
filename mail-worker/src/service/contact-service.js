@@ -7,15 +7,21 @@ import BizError from '../error/biz-error';
 
 const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 
+async function ensureTable(c) {
+	await c.env.db.prepare(`CREATE TABLE IF NOT EXISTS contact (contact_id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, name TEXT NOT NULL, email TEXT NOT NULL, is_del INTEGER NOT NULL DEFAULT 0, create_time TEXT DEFAULT CURRENT_TIMESTAMP, update_time TEXT DEFAULT CURRENT_TIMESTAMP)`).run();
+	await c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_contact_user_email ON contact(user_id, email)`).run();
+}
+
 const contactService = {
 	async list(c, params, userId) {
+		await ensureTable(c);
 		const keyword = String(params.keyword || '').trim();
 		const size = Math.min(Math.max(Number(params.size) || 50, 1), 100);
 		const page = Math.max(Number(params.page) || 1, 1);
 		const where = [eq(contact.userId, userId), eq(contact.isDel, isDel.NORMAL)];
 		if (keyword) {
 			const pattern = `%${keyword}%`;
-			where.push(or(like(contact.name, pattern), like(contact.email, pattern)));
+			where.push(or(like(contact.name, pattern), sql`lower(${contact.email}) like ${normalizeEmail(pattern)}`));
 		}
 		const list = await orm(c).select().from(contact).where(and(...where)).orderBy(asc(contact.name), asc(contact.contactId)).limit(size).offset((page - 1) * size).all();
 		const total = await orm(c).select({ total: count() }).from(contact).where(and(...where)).get();
@@ -23,10 +29,12 @@ const contactService = {
 	},
 
 	async get(c, contactId, userId) {
+		await ensureTable(c);
 		return orm(c).select().from(contact).where(and(eq(contact.contactId, Number(contactId)), eq(contact.userId, userId), eq(contact.isDel, isDel.NORMAL))).get();
 	},
 
 	async create(c, params, userId) {
+		await ensureTable(c);
 		const name = String(params.name || '').trim();
 		const emailAddress = normalizeEmail(params.email);
 		if (!name || !emailAddress) throw new BizError('Contact name and email are required');
@@ -36,6 +44,7 @@ const contactService = {
 	},
 
 	async update(c, params, userId) {
+		await ensureTable(c);
 		const contactId = Number(params.contactId);
 		const name = String(params.name || '').trim();
 		const emailAddress = normalizeEmail(params.email);
@@ -47,10 +56,12 @@ const contactService = {
 	},
 
 	async delete(c, contactId, userId) {
+		await ensureTable(c);
 		await orm(c).update(contact).set({ isDel: isDel.DELETE, updateTime: new Date().toISOString() }).where(and(eq(contact.contactId, Number(contactId)), eq(contact.userId, userId), eq(contact.isDel, isDel.NORMAL))).run();
 	},
 
 	async emails(c, params, userId) {
+		await ensureTable(c);
 		const contactRow = await this.get(c, params.contactId, userId);
 		if (!contactRow) throw new BizError('Contact not found');
 		const address = normalizeEmail(contactRow.email);
