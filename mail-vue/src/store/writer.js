@@ -16,6 +16,9 @@ export const useWriterStore = defineStore('writer', {
                     name: item.name,
                     email: String(item.email || '').trim().toLowerCase()
                 })).filter(item => item.email);
+                const contactEmails = this.contactRecord.map(item => item.email);
+                const recent = this.sendRecipientRecord.map(item => String(item).trim().toLowerCase()).filter(Boolean);
+                this.sendRecipientRecord = [...new Set([...contactEmails, ...recent])].slice(0, 500);
             } catch (e) {
                 console.warn('联系人加载失败:', e);
             }
