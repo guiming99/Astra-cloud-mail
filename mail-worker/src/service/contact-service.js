@@ -27,57 +27,44 @@ const contactService = {
 		const total = await orm(c).select({ total: count() }).from(contact).where(and(...where)).get();
 		return { list, total: total?.total || 0, page, size };
 	},
-
 	async get(c, contactId, userId) {
 		await ensureTable(c);
 		return orm(c).select().from(contact).where(and(eq(contact.contactId, Number(contactId)), eq(contact.userId, userId), eq(contact.isDel, isDel.NORMAL))).get();
 	},
-
 	async create(c, params, userId) {
 		await ensureTable(c);
-		const name = String(params.name || '').trim();
-		const emailAddress = normalizeEmail(params.email);
+		const name = String(params.name || '').trim(); const emailAddress = normalizeEmail(params.email);
 		if (!name || !emailAddress) throw new BizError('Contact name and email are required');
 		const exists = await orm(c).select().from(contact).where(and(eq(contact.userId, userId), sql`lower(${contact.email}) = ${emailAddress}`, eq(contact.isDel, isDel.NORMAL))).get();
 		if (exists) throw new BizError('Contact email already exists');
 		return orm(c).insert(contact).values({ userId, name, email: emailAddress }).returning().get();
 	},
-
 	async update(c, params, userId) {
 		await ensureTable(c);
-		const contactId = Number(params.contactId);
-		const name = String(params.name || '').trim();
-		const emailAddress = normalizeEmail(params.email);
+		const contactId = Number(params.contactId); const name = String(params.name || '').trim(); const emailAddress = normalizeEmail(params.email);
 		if (!contactId || !name || !emailAddress) throw new BizError('Contact id, name and email are required');
 		if (!await this.get(c, contactId, userId)) throw new BizError('Contact not found');
 		const duplicate = await orm(c).select().from(contact).where(and(eq(contact.userId, userId), sql`lower(${contact.email}) = ${emailAddress}`, eq(contact.isDel, isDel.NORMAL))).all();
 		if (duplicate.some(row => row.contactId !== contactId)) throw new BizError('Contact email already exists');
 		return orm(c).update(contact).set({ name, email: emailAddress, updateTime: new Date().toISOString() }).where(and(eq(contact.contactId, contactId), eq(contact.userId, userId), eq(contact.isDel, isDel.NORMAL))).returning().get();
 	},
-
 	async delete(c, contactId, userId) {
 		await ensureTable(c);
 		await orm(c).update(contact).set({ isDel: isDel.DELETE, updateTime: new Date().toISOString() }).where(and(eq(contact.contactId, Number(contactId)), eq(contact.userId, userId), eq(contact.isDel, isDel.NORMAL))).run();
 	},
-
 	async emails(c, params, userId) {
 		await ensureTable(c);
-		const contactRow = await this.get(c, params.contactId, userId);
-		if (!contactRow) throw new BizError('Contact not found');
+		const contactRow = await this.get(c, params.contactId, userId); if (!contactRow) throw new BizError('Contact not found');
 		const address = normalizeEmail(contactRow.email);
-		const where = and(
-			eq(email.userId, userId),
-			eq(email.isDel, isDel.NORMAL),
-			or(
-				sql`lower(${email.sendEmail}) = ${address}`,
-				sql`lower(${email.recipient}) like ${`%\"address\":\"${address}\"%`}`
-			)
-		);
-		const size = Math.min(Math.max(Number(params.size) || 50, 1), 100);
+		const where = and(eq(email.userId, userId), eq(email.isDel, isDel.NORMAL), or(sql`lower(${email.sendEmail}) = ${address}`, sql`lower(${email.recipient}) like ${`%\"address\":\"${address}\"%`}`));
+		const requestedSize = Number(params.size);
 		const page = Math.max(Number(params.page) || 1, 1);
-		const list = await orm(c).select().from(email).where(where).orderBy(desc(email.emailId)).limit(size).offset((page - 1) * size).all();
+		let listQuery = orm(c).select().from(email).where(where).orderBy(desc(email.emailId));
+		let list;
+		if (requestedSize === 0) list = await listQuery.all();
+		else { const size = Math.min(Math.max(requestedSize || 100, 1), 500); list = await listQuery.limit(size).offset((page - 1) * size).all(); }
 		const total = await orm(c).select({ total: count() }).from(email).where(where).get();
-		return { contact: contactRow, list, total: total?.total || 0, page, size };
+		return { contact: contactRow, list, total: total?.total || 0, page, size: requestedSize === 0 ? 0 : Math.min(Math.max(requestedSize || 100, 1), 500) };
 	}
 };
 
