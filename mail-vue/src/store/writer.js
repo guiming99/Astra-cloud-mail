@@ -18,5 +18,6 @@ export const useWriterStore = defineStore('writer', {
     },
     persist: {
         pick: ['sendRecipientRecord'],
+        afterRestore: ({ store }) => { store.loadContacts(); }
     },
 })
