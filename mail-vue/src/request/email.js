@@ -23,17 +23,15 @@ function composeEnhancedForm(form) {
     const forwardAttachments = window.__cloudMailForwardAttachments || [];
     if (cc.length) enhanced.cc = [...cc];
     if (bcc.length) enhanced.bcc = [...bcc];
-    if (forwardAttachments.length && (!enhanced.attachments || enhanced.attachments.length === 0)) {
-        enhanced.attachments = [...forwardAttachments];
-    }
+    if (forwardAttachments.length && (!enhanced.attachments || enhanced.attachments.length === 0)) enhanced.attachments = [...forwardAttachments];
+    window.__cloudMailCcBcc = {cc: [], bcc: []};
+    window.__cloudMailForwardAttachments = [];
     return enhanced;
 }
 
 export function emailSend(form,progress) {
     return http.post('/email/send', composeEnhancedForm(form),{
-        onUploadProgress: (e) => {
-            progress(e)
-        },
+        onUploadProgress: (e) => { progress(e) },
         noMsg: true
     })
 }
